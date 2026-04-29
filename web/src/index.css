@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+:root {
+  --paper:        #fdfbf7;
+  --pencil:       #2d2d2d;
+  --erased:       #e5e0d8;
+  --marker-red:   #ff4d4d;
+  --pen-blue:     #2d5da1;
+  --postit:       #fff9c4;
+  --postit-blue:  #cde6ff;
+  --postit-pink:  #ffd4d4;
+  --postit-violet:#e8d8ff;
+}
+
+html, body {
+  font-family: 'Patrick Hand', 'Comic Sans MS', cursive;
+  color: var(--pencil);
+}
+body {
+  background-color: var(--paper);
+  background-image: radial-gradient(#e5e0d8 1px, transparent 1px);
+  background-size: 24px 24px;
+  min-height: 100vh;
+}
+.heading, h1, h2, h3, h4 {
+  font-family: 'Kalam', cursive;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+/* Wobbly border-radius — irregular ovals, not circles. */
+.r-wobbly { border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px; }
+.r-card   { border-radius: 25px 60px 30px 50px / 50px 30px 60px 25px; }
+.r-card-2 { border-radius: 60px 25px 50px 30px / 30px 50px 25px 60px; }
+.r-blob   { border-radius: 40px 20px 50px 25px / 25px 50px 20px 40px; }
+.r-small  { border-radius: 18px 8px 16px 10px / 10px 16px 8px 18px; }
+
+.ink           { border: 3px solid #2d2d2d; }
+.ink-2         { border: 2px solid #2d2d2d; }
+.ink-shadow    { box-shadow: 4px 4px 0 0 #2d2d2d; }
+.ink-shadow-lg { box-shadow: 8px 8px 0 0 #2d2d2d; }
+.ink-shadow-sm { box-shadow: 3px 3px 0 0 rgba(45,45,45,.18); }
+
+/* Reusable "paper card" container. */
+.paper-card {
+  position: relative;
+  background: #fff;
+  border: 3px solid #2d2d2d;
+  border-radius: 25px 60px 30px 50px / 50px 30px 60px 25px;
+  box-shadow: 4px 4px 0 0 #2d2d2d;
+}
+.paper-card.alt           { border-radius: 60px 25px 50px 30px / 30px 50px 25px 60px; }
+.paper-card.postit        { background: #fff9c4; }
+.paper-card.postit-blue   { background: #cde6ff; }
+.paper-card.postit-pink   { background: #ffd4d4; }
+.paper-card.postit-violet { background: #e8d8ff; }
+
+/* Buttons. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .65rem 1.4rem; min-height: 48px;
+  font-family: 'Patrick Hand', cursive; font-size: 1.125rem; line-height: 1;
+  background: #fff; color: #2d2d2d;
+  border: 3px solid #2d2d2d;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+  box-shadow: 4px 4px 0 0 #2d2d2d;
+  transition: transform .1s, box-shadow .1s, background-color .15s, color .15s;
+  cursor: pointer; text-decoration: none;
+}
+.btn:hover { background: #ff4d4d; color: #fff; transform: translate(2px, 2px); box-shadow: 2px 2px 0 0 #2d2d2d; }
+.btn:active { transform: translate(4px, 4px); box-shadow: none; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-secondary { background: #e5e0d8; }
+.btn-secondary:hover { background: #2d5da1; color: #fff; }
+.btn-stamp {
+  font-family: 'Kalam', cursive; font-weight: 700; font-size: 1.5rem;
+  padding: .75rem 1.75rem; transform: rotate(-2deg);
+}
+.btn-stamp:hover { transform: rotate(-2deg) translate(2px, 2px); }
+.btn-ghost {
+  background: transparent; border-color: transparent; box-shadow: none;
+  padding: .25rem .5rem; min-height: 0;
+}
+.btn-ghost:hover { background: transparent; color: #ff4d4d; box-shadow: none; transform: none; text-decoration: line-through; }
+
+/* Inputs. */
+.input {
+  width: 100%; padding: .65rem .9rem;
+  font-family: 'Patrick Hand', cursive; font-size: 1.125rem;
+  background: #fff; color: #2d2d2d;
+  border: 2px solid #2d2d2d;
+  border-radius: 40px 20px 50px 25px / 25px 50px 20px 40px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.input::placeholder { color: rgba(45,45,45,.4); }
+.input:focus { outline: none; border-color: #2d5da1; box-shadow: 0 0 0 3px rgba(45,93,161,.2); }
+textarea.input { line-height: 1.6; min-height: 4.5rem; }
+
+/* Underlines & decorations. */
+.wavy {
+  text-decoration: underline wavy #ff4d4d;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 2px;
+}
+.strike-soft { text-decoration: line-through; text-decoration-color: #2d2d2d; text-decoration-thickness: 2px; }
+
+/* Animations. */
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.float { animation: float 3s ease-in-out infinite; }
+@keyframes shake {
+  10%,90% { transform: translateX(-1px); }
+  20%,80% { transform: translateX(2px); }
+  30%,50%,70% { transform: translateX(-4px); }
+  40%,60% { transform: translateX(4px); }
+}
+.shake { animation: shake .35s; }
+@keyframes pop {
+  0% { transform: scale(.85) rotate(-2deg); opacity: 0; }
+  60% { transform: scale(1.06) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+.pop { animation: pop .35s ease-out; }
+
+/* File input — make the button look hand-drawn. */
+input[type="file"]::file-selector-button {
+  font-family: 'Patrick Hand', cursive; font-size: 1rem;
+  padding: .35rem .9rem; margin-right: .75rem;
+  background: #fff9c4; color: #2d2d2d;
+  border: 2px solid #2d2d2d;
+  border-radius: 18px 8px 16px 10px / 10px 16px 8px 18px;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover { background: #ff4d4d; color: #fff; }

@@ -1,0 +1,9 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+sqlmodel==0.0.22
+python-multipart==0.0.17
+google-genai==0.3.0
+pypdf==5.1.0
+python-dotenv==1.0.1
+passlib[argon2]==1.7.4
+email-validator==2.2.0
