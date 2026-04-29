@@ -2,11 +2,13 @@
 
 Turn your notes into a roguelike. Drop in a markdown / PDF / text file, an LLM extracts atomic flashcards, and you "run" the deck — wrong answers cost HP, streaks earn buffs (heal, hint, shield, focus), the run ends when you die or clear the deck. Mastery decays between runs so it stays useful long-term.
 
+Live: **https://roguelearn.vercel.app**
+
 ## Stack
 
 Two services that run independently:
 
-- **Backend** (`app/`) — FastAPI JSON API. SQLite via SQLModel in dev; works with Postgres unchanged in prod. `argon2id` password hashing, DB-backed sessions, per-session CSRF tokens (`X-CSRF-Token` header), `HttpOnly`+`SameSite=Lax` cookies (`Secure` in `ENV=prod`). Google Gemini (`gemini-2.5-flash`) for card extraction and free-response grading.
+- **Backend** (`app/`) — FastAPI JSON API. SQLite via SQLModel in dev; works with Postgres unchanged in prod. `argon2id` password hashing, DB-backed sessions, per-session CSRF tokens (`X-CSRF-Token` header), `HttpOnly` cookies (`SameSite=Lax` in dev, `SameSite=None; Secure` in `ENV=prod`). Google Gemini (`gemini-2.5-flash`) for card extraction and free-response grading.
 - **Frontend** (`web/`) — Vite + React 19 + TypeScript SPA. React Router 7 for routing, TanStack Query for server state, Tailwind v4 for styling. Hand-drawn paper aesthetic (Kalam + Patrick Hand).
 
 ## Setup
@@ -105,33 +107,49 @@ web/                       Vite + React SPA
       LoginPage, SignupPage, HomePage, DeckPage, RunPage
 ```
 
-## Deployment (split)
+## Deployment
 
-Frontend and backend deploy independently — pick a host for each.
+The repo is set up to deploy as **Fly.io (backend) + Vercel (frontend)**, with Vercel reverse-proxying `/api/*` to Fly so the session cookie stays first-party. Files: `Dockerfile`, `fly.toml`, `web/vercel.json`.
 
-### Backend (FastAPI)
+### Backend → Fly.io
 
-1. Set `ENV=prod` — flips cookie `Secure` flag on (HTTPS-only).
-2. Set a real `SECRET_KEY` (`python -c "import secrets; print(secrets.token_urlsafe(48))"`).
-3. Use Postgres: set `DATABASE_URL=postgresql+psycopg://user:pw@host:5432/roguelearn`.
-4. Set `FRONTEND_ORIGIN` to your prod frontend URL (e.g. `https://roguelearn.app`). Comma-separated for multiple origins.
-5. Run behind HTTPS (TLS terminator, e.g. Caddy / nginx / Cloudflare / Fly.io's edge).
-6. Run with multiple workers:
-   ```bash
-   gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 4 --bind 0.0.0.0:8000
-   ```
-7. Put a rate limiter in front of `/api/auth/login` and `/api/auth/signup` — recommend [`slowapi`](https://github.com/laurentS/slowapi) or your edge proxy's rate limiting (e.g. 5 attempts/min/IP).
-8. Health check: `GET /healthz` returns `200 ok`.
+```bash
+fly launch --no-deploy        # accepts existing fly.toml
+fly volumes create data --size 1 --region <region>   # for SQLite at /data
+fly secrets set \
+  GEMINI_API_KEY=... \
+  SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
+  FRONTEND_ORIGIN=https://<your-app>.vercel.app,http://localhost:5173
+fly deploy
+```
 
-### Frontend (SPA)
+Notes:
+- `fly.toml` sets `ENV=prod` (flips cookie `Secure` on), `DATABASE_URL=sqlite:////data/roguelearn.db`, and mounts the `data` volume. Switch `DATABASE_URL` to `postgresql+psycopg://...` to use Postgres instead.
+- `memory_mb = 512` — argon2id needs ~64 MiB per hash, 256 MB OOM-kills uvicorn during signup.
+- `FRONTEND_ORIGIN` is the CORS allowlist (comma-separated). Even with the Vercel proxy below, keep your Vercel URL here as a safety net for direct browser calls.
+- Health check: `GET /healthz` → `200 ok`.
 
-1. Set `VITE_API_BASE_URL=https://api.roguelearn.app` in the build environment.
-2. `npm run build` — outputs static assets to `web/dist/`.
-3. Serve `web/dist/` from any static host (Vercel, Netlify, Cloudflare Pages, S3 + CloudFront). Configure SPA fallback so any unknown path serves `index.html` (React Router handles client-side routing).
+### Frontend → Vercel
 
-### Cross-origin cookies
+`web/vercel.json` rewrites `/api/*` to the Fly backend, so the SPA calls **same-origin** paths and the session cookie is first-party on the Vercel domain (avoids third-party-cookie blocking in Safari/Chrome).
 
-The session cookie is `SameSite=Lax`, which is fine when frontend and backend are on the **same registrable domain** (e.g. `app.example.com` + `api.example.com`). If you put them on entirely different domains, switch the cookie to `SameSite=None; Secure` in `app/auth.py:set_session_cookie` — but that's a meaningful CSRF surface change, so prefer same-domain.
+```bash
+cd web
+vercel link        # link to a Vercel project
+vercel deploy --prod
+```
+
+Do **not** set `VITE_API_BASE_URL` for this topology — leave it unset so `web/src/api/client.ts` uses same-origin paths that the rewrite catches. Update the `destination` in `web/vercel.json` if your Fly app name differs from `roguelearn`.
+
+### Hardening for real traffic
+
+- Multiple workers: `gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 4 --bind 0.0.0.0:8000` (update `Dockerfile` `CMD`). With shared SQLite this only helps for read concurrency — switch to Postgres before scaling out.
+- Rate-limit `/api/auth/login` and `/api/auth/signup` (e.g. [`slowapi`](https://github.com/laurentS/slowapi) at ~5/min/IP, or do it at the edge).
+- See "Schema migrations" below before changing models in prod.
+
+### Alternative: separate domains without a proxy
+
+If you put the SPA and API on **different registrable domains** without a proxy (e.g. `roguelearn.app` + `api.someotherhost.com`), the session cookie becomes third-party and most browsers will drop it. Either: put both behind one apex (`app.example.com` + `api.example.com` — `SameSite=Lax` works), or keep the proxy approach above. Avoid the bare-`SameSite=None` cross-site path unless you're prepared to harden CSRF further.
 
 ### Schema migrations
 
@@ -151,7 +169,7 @@ Replace the `init_db()` call in `app/main.py` startup with `alembic upgrade head
 
 - Passwords hashed with **argon2id** (passlib's `argon2` scheme).
 - Sessions are DB-backed with opaque random tokens (32 bytes from `secrets.token_urlsafe`); the cookie carries only the token, never user data.
-- Cookies are `HttpOnly`, `SameSite=Lax`, `Secure` in prod.
+- Cookies are `HttpOnly`; `SameSite=Lax` in dev, `SameSite=None; Secure` in prod (cross-origin SPA → API), with the Vercel proxy keeping them first-party in practice.
 - Per-session **CSRF token** is required on every state-changing endpoint via the `X-CSRF-Token` header (login/signup are exempt — no session yet).
 - Login error messages are deliberately generic ("Email or password is incorrect") to avoid leaking whether an email is registered.
 - All deck/run access is scoped by `user_id` in the route handlers (`_owned_deck` / `_owned_run` helpers).
