@@ -107,65 +107,11 @@ web/                       Vite + React SPA
       LoginPage, SignupPage, HomePage, DeckPage, RunPage
 ```
 
-## Deployment
+## Hosting
 
-The repo is set up to deploy as **Fly.io (backend) + Vercel (frontend)**, with Vercel reverse-proxying `/api/*` to Fly so the session cookie stays first-party. Files: `Dockerfile`, `fly.toml`, `web/vercel.json`.
+Backend on Fly.io, frontend on Vercel — Vercel rewrites `/api/*` to the Fly backend so the session cookie stays first-party. See `fly.toml`, `Dockerfile`, and `web/vercel.json`.
 
-### Backend → Fly.io
-
-```bash
-fly launch --no-deploy        # accepts existing fly.toml
-fly volumes create data --size 1 --region <region>   # for SQLite at /data
-fly secrets set \
-  GEMINI_API_KEY=... \
-  SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
-  FRONTEND_ORIGIN=https://<your-app>.vercel.app,http://localhost:5173
-fly deploy
-```
-
-Notes:
-- `fly.toml` sets `ENV=prod` (flips cookie `Secure` on), `DATABASE_URL=sqlite:////data/roguelearn.db`, and mounts the `data` volume. Switch `DATABASE_URL` to `postgresql+psycopg://...` to use Postgres instead.
-- `memory_mb = 512` — argon2id needs ~64 MiB per hash, 256 MB OOM-kills uvicorn during signup.
-- `FRONTEND_ORIGIN` is the CORS allowlist (comma-separated). Even with the Vercel proxy below, keep your Vercel URL here as a safety net for direct browser calls.
-- Health check: `GET /healthz` → `200 ok`.
-
-### Frontend → Vercel
-
-`web/vercel.json` rewrites `/api/*` to the Fly backend, so the SPA calls **same-origin** paths and the session cookie is first-party on the Vercel domain (avoids third-party-cookie blocking in Safari/Chrome).
-
-```bash
-cd web
-vercel link        # link to a Vercel project
-vercel deploy --prod
-```
-
-Do **not** set `VITE_API_BASE_URL` for this topology — leave it unset so `web/src/api/client.ts` uses same-origin paths that the rewrite catches. Update the `destination` in `web/vercel.json` if your Fly app name differs from `roguelearn`.
-
-### Hardening for real traffic
-
-- Multiple workers: `gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 4 --bind 0.0.0.0:8000` (update `Dockerfile` `CMD`). With shared SQLite this only helps for read concurrency — switch to Postgres before scaling out.
-- Rate-limit `/api/auth/login` and `/api/auth/signup` (e.g. [`slowapi`](https://github.com/laurentS/slowapi) at ~5/min/IP, or do it at the edge).
-- See "Schema migrations" below before changing models in prod.
-
-### Alternative: separate domains without a proxy
-
-If you put the SPA and API on **different registrable domains** without a proxy (e.g. `roguelearn.app` + `api.someotherhost.com`), the session cookie becomes third-party and most browsers will drop it. Either: put both behind one apex (`app.example.com` + `api.example.com` — `SameSite=Lax` works), or keep the proxy approach above. Avoid the bare-`SameSite=None` cross-site path unless you're prepared to harden CSRF further.
-
-### Schema migrations
-
-For prod, swap `init_db()` (which only creates missing tables) for [Alembic](https://alembic.sqlalchemy.org/):
-
-```bash
-pip install alembic
-alembic init alembic
-# edit alembic/env.py to use SQLModel.metadata
-alembic revision --autogenerate -m "init"
-alembic upgrade head
-```
-
-Replace the `init_db()` call in `app/main.py` startup with `alembic upgrade head` in your deploy script.
-
-### Security posture
+## Security posture
 
 - Passwords hashed with **argon2id** (passlib's `argon2` scheme).
 - Sessions are DB-backed with opaque random tokens (32 bytes from `secrets.token_urlsafe`); the cookie carries only the token, never user data.
@@ -174,7 +120,7 @@ Replace the `init_db()` call in `app/main.py` startup with `alembic upgrade head
 - Login error messages are deliberately generic ("Email or password is incorrect") to avoid leaking whether an email is registered.
 - All deck/run access is scoped by `user_id` in the route handlers (`_owned_deck` / `_owned_run` helpers).
 
-### What's intentionally not implemented yet
+## What's intentionally not implemented yet
 
 - Email verification (needs SMTP)
 - Password reset (needs SMTP)
